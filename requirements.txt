@@ -7,3 +7,9 @@ folium
 streamlit-folium
 openpyxl
 streamlit-folium
+streamlit
+pandas
+folium
+streamlit-folium
+openpyxl
+
