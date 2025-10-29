@@ -8,6 +8,12 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 from io import BytesIO
 import unicodedata
+import base64
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from PIL import Image
+import tempfile
+import time
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -24,7 +30,7 @@ def limpiar_texto(texto):
     return unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('utf-8').lower().strip()
 
 def obtener_centroide(feature):
-    """Calcula el centroide del polígono más grande en una feature GeoJSON."""
+    """Calcula el centroide del polígono más grande en una features GeoJSON."""
     geom = feature.get("geometry", {})
     gtype, coords = geom.get("type"), geom.get("coordinates", [])
     if gtype == "Polygon": polygon_coords = coords[0]
@@ -91,6 +97,53 @@ def crear_mapa(df, gj_data, campo_geojson, col_lat, col_lon, col_colonia):
     folium.LayerControl(collapsed=False).add_to(mapa)
     return mapa
 
+# --- FUNCIONES DE DESCARGA AGREGADAS ---
+def guardar_mapa_html(mapa):
+    """Guarda el mapa como archivo HTML temporal y devuelve los datos para descarga"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as tmp_file:
+        mapa.save(tmp_file.name)
+        with open(tmp_file.name, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+    return html_content
+
+def generar_imagen_mapa(mapa):
+    """Genera una imagen PNG del mapa usando Selenium"""
+    try:
+        # Guardar mapa temporalmente como HTML
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.html') as tmp_html:
+            mapa.save(tmp_html.name)
+        
+        # Configurar Selenium para captura de pantalla
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--window-size=1200,800")
+        
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(f"file://{tmp_html.name}")
+        time.sleep(3)  # Esperar a que cargue el mapa
+        
+        # Capturar screenshot
+        screenshot = driver.get_screenshot_as_png()
+        driver.quit()
+        
+        return screenshot
+    except Exception as e:
+        st.error(f"Error al generar imagen: {e}")
+        return None
+
+def crear_boton_descarga(data, nombre_archivo, tipo_descarga):
+    """Crea un botón de descarga para el archivo"""
+    b64 = base64.b64encode(data).decode()
+    href = f'data:application/octet-stream;base64,{b64}'
+    st.download_button(
+        label=f"📥 Descargar {tipo_descarga}",
+        data=data,
+        file_name=nombre_archivo,
+        mime="application/octet-stream",
+        key=f"download_{tipo_descarga}_{hash(nombre_archivo)}"
+    )
 
 # --- INTERFAZ DE STREAMLIT ---
 
@@ -196,7 +249,41 @@ if 'df_filtrado' in locals() and not df_filtrado.empty:
     # Crear y mostrar el mapa
     mapa_final = crear_mapa(df_filtrado, gj_data, campo_geojson_seleccionado, col_lat, col_lon, col_colonia)
     
+    # Mostrar el mapa
     st_folium(mapa_final, width=1200, height=600, returned_objects=[])
+    
+    # --- BOTONES DE DESCARGA AGREGADOS ---
+    st.markdown("---")
+    st.subheader("📥 Descargar Mapa")
+    
+    col_download1, col_download2 = st.columns(2)
+    
+    with col_download1:
+        # Botón para descargar HTML
+        if st.button("💾 Descargar como HTML", use_container_width=True):
+            with st.spinner("Generando archivo HTML..."):
+                html_content = guardar_mapa_html(mapa_final)
+                crear_boton_descarga(
+                    html_content.encode('utf-8'),
+                    "mapa_atenciones_prehospitalarias.html",
+                    "HTML"
+                )
+                st.success("✅ Archivo HTML listo para descargar")
+    
+    with col_download2:
+        # Botón para descargar imagen
+        if st.button("🖼️ Descargar como Imagen (PNG)", use_container_width=True):
+            with st.spinner("Generando imagen del mapa... Esto puede tomar unos segundos"):
+                screenshot = generar_imagen_mapa(mapa_final)
+                if screenshot:
+                    crear_boton_descarga(
+                        screenshot,
+                        "mapa_atenciones_prehospitalarias.png",
+                        "Imagen PNG"
+                    )
+                    st.success("✅ Imagen PNG lista para descargar")
+                else:
+                    st.error("❌ No se pudo generar la imagen. Asegúrate de tener Chrome instalado.")
 
 elif 'uploaded_data_file' in locals() and uploaded_data_file and 'uploaded_geojson_file' in locals() and uploaded_geojson_file:
     st.warning("⚠️ No se encontraron datos para el rango de fechas seleccionado o faltan asignaciones de columnas. Por favor, ajusta los filtros.")
