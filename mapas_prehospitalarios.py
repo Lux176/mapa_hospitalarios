@@ -56,44 +56,71 @@ def obtener_centroide(feature):
     except Exception:
         return None
 
-def crear_leyenda_personalizada(mapa, color_map):
+def crear_leyenda_personalizada(mapa, color_map, usar_sm):
     """Crea una leyenda personalizada para el mapa."""
-    legend_html = '''
-    <div id="legend" style="
-        position: fixed; 
-        bottom: 50px; 
-        left: 50px; 
-        width: 180px; 
-        height: auto; 
-        background: white; 
-        border: 2px solid grey; 
-        z-index: 9999; 
-        padding: 10px; 
-        font-size: 14px;
-        border-radius: 5px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.2);
-        font-family: Arial, sans-serif;
-    ">
-    <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">
-        Fuente de Atención
-    </div>
-    <div style="margin-bottom: 5px;">
-        <span style="background: {color_pc}; width: 15px; height: 15px; display: inline-block; margin-right: 8px; border-radius: 50%; border: 1px solid #333;"></span>
-        Protección Civil
-    </div>
-    <div style="margin-bottom: 5px;">
-        <span style="background: {color_sm}; width: 15px; height: 15px; display: inline-block; margin-right: 8px; border-radius: 50%; border: 1px solid #333;"></span>
-        Servicios Médicos
-    </div>
-    </div>
-    '''.format(
-        color_pc=color_map['Protección Civil'],
-        color_sm=color_map['Servicios Médicos']
-    )
+    if usar_sm:
+        legend_html = '''
+        <div id="legend" style="
+            position: fixed; 
+            bottom: 50px; 
+            left: 50px; 
+            width: 180px; 
+            height: auto; 
+            background: white; 
+            border: 2px solid grey; 
+            z-index: 9999; 
+            padding: 10px; 
+            font-size: 14px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+        ">
+        <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">
+            Fuente de Atención
+        </div>
+        <div style="margin-bottom: 5px;">
+            <span style="background: {color_pc}; width: 15px; height: 15px; display: inline-block; margin-right: 8px; border-radius: 50%; border: 1px solid #333;"></span>
+            Protección Civil
+        </div>
+        <div style="margin-bottom: 5px;">
+            <span style="background: {color_sm}; width: 15px; height: 15px; display: inline-block; margin-right: 8px; border-radius: 50%; border: 1px solid #333;"></span>
+            Servicios Médicos
+        </div>
+        </div>
+        '''.format(
+            color_pc=color_map['Protección Civil'],
+            color_sm=color_map['Servicios Médicos']
+        )
+    else:
+        legend_html = '''
+        <div id="legend" style="
+            position: fixed; 
+            bottom: 50px; 
+            left: 50px; 
+            width: 180px; 
+            height: auto; 
+            background: white; 
+            border: 2px solid grey; 
+            z-index: 9999; 
+            padding: 10px; 
+            font-size: 14px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+        ">
+        <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">
+            Atenciones Médicas
+        </div>
+        <div style="margin-bottom: 5px;">
+            <span style="background: {color_pc}; width: 15px; height: 15px; display: inline-block; margin-right: 8px; border-radius: 50%; border: 1px solid #333;"></span>
+            Todas las atenciones
+        </div>
+        </div>
+        '''.format(color_pc=color_map['Protección Civil'])
     
     mapa.get_root().html.add_child(folium.Element(legend_html))
 
-def crear_mapa(df, gj_data, campo_geojson, col_lat, col_lon, col_colonia, col_fecha, mostrar_leyenda=True):
+def crear_mapa(df, gj_data, campo_geojson, col_lat, col_lon, col_colonia, col_fecha, mostrar_leyenda=True, usar_sm=False):
     """Crea y configura el mapa Folium con todas sus capas."""
     try:
         # Calcular centro del mapa
@@ -162,90 +189,131 @@ def crear_mapa(df, gj_data, campo_geojson, col_lat, col_lon, col_colonia, col_fe
                 ).add_to(capa_nombres)
         mapa.add_child(capa_nombres)
 
-        # CAPAS DE PUNTOS
-        puntos_pc = folium.FeatureGroup(name="📍 Protección Civil", show=True)
-        puntos_sm = folium.FeatureGroup(name="📍 Servicios Médicos", show=True)
-        
-        # CAPAS DE CALOR
-        calor_pc = folium.FeatureGroup(name="🔥 Calor - Protección Civil", show=True)
-        calor_sm = folium.FeatureGroup(name="🔥 Calor - Servicios Médicos", show=False)
-
-        # Separar datos por fuente
-        df_pc = df[df['Fuente de Atención'] == 'Protección Civil']
-        df_sm = df[df['Fuente de Atención'] == 'Servicios Médicos']
-
-        # Agregar puntos de Protección Civil
-        for _, row in df_pc.iterrows():
-            try:
-                fecha_str = row[col_fecha].strftime('%d/%m/%Y') if hasattr(row[col_fecha], 'strftime') else str(row[col_fecha])
-                popup_html = f"""
-                <div style="font-family: Arial; font-size: 12px;">
-                    <b>Fecha:</b> {fecha_str}<br>
-                    <b>Colonia:</b> {row[col_colonia].title()}<br>
-                    <b>Atendido por:</b> Protección Civil
-                </div>
-                """
-                folium.CircleMarker(
-                    location=[row[col_lat], row[col_lon]], 
-                    radius=6, 
-                    color=color_map['Protección Civil'],
-                    fill=True, 
-                    fill_color=color_map['Protección Civil'], 
-                    fill_opacity=0.8,
-                    popup=folium.Popup(popup_html, max_width=300),
-                    tooltip="Protección Civil"
-                ).add_to(puntos_pc)
-            except Exception as e:
-                continue
-
-        # Agregar puntos de Servicios Médicos
-        for _, row in df_sm.iterrows():
-            try:
-                fecha_str = row[col_fecha].strftime('%d/%m/%Y') if hasattr(row[col_fecha], 'strftime') else str(row[col_fecha])
-                popup_html = f"""
-                <div style="font-family: Arial; font-size: 12px;">
-                    <b>Fecha:</b> {fecha_str}<br>
-                    <b>Colonia:</b> {row[col_colonia].title()}<br>
-                    <b>Atendido por:</b> Servicios Médicos
-                </div>
-                """
-                folium.CircleMarker(
-                    location=[row[col_lat], row[col_lon]], 
-                    radius=6, 
-                    color=color_map['Servicios Médicos'],
-                    fill=True, 
-                    fill_color=color_map['Servicios Médicos'], 
-                    fill_opacity=0.8,
-                    popup=folium.Popup(popup_html, max_width=300),
-                    tooltip="Servicios Médicos"
-                ).add_to(puntos_sm)
-            except Exception as e:
-                continue
-
-        # Agregar mapas de calor
-        if not df_pc.empty:
-            HeatMap(
-                df_pc[[col_lat, col_lon]].values, 
-                radius=15,
-                gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}
-            ).add_to(calor_pc)
+        if usar_sm:
+            # CAPAS DE PUNTOS (con distinción SM/PC)
+            puntos_pc = folium.FeatureGroup(name="📍 Protección Civil", show=True)
+            puntos_sm = folium.FeatureGroup(name="📍 Servicios Médicos", show=True)
             
-        if not df_sm.empty:
-            HeatMap(
-                df_sm[[col_lat, col_lon]].values, 
-                radius=15,
-                gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}
-            ).add_to(calor_sm)
+            # CAPAS DE CALOR (con distinción SM/PC)
+            calor_pc = folium.FeatureGroup(name="🔥 Calor - Protección Civil", show=True)
+            calor_sm = folium.FeatureGroup(name="🔥 Calor - Servicios Médicos", show=False)
 
-        # Agregar todas las capas al mapa
-        mapa.add_child(puntos_pc)
-        mapa.add_child(puntos_sm)
-        mapa.add_child(calor_pc)
-        mapa.add_child(calor_sm)
+            # Separar datos por fuente
+            df_pc = df[df['Fuente de Atención'] == 'Protección Civil']
+            df_sm = df[df['Fuente de Atención'] == 'Servicios Médicos']
+
+            # Agregar puntos de Protección Civil
+            for _, row in df_pc.iterrows():
+                try:
+                    fecha_str = row[col_fecha].strftime('%d/%m/%Y') if hasattr(row[col_fecha], 'strftime') else str(row[col_fecha])
+                    popup_html = f"""
+                    <div style="font-family: Arial; font-size: 12px;">
+                        <b>Fecha:</b> {fecha_str}<br>
+                        <b>Colonia:</b> {row[col_colonia].title()}<br>
+                        <b>Atendido por:</b> Protección Civil
+                    </div>
+                    """
+                    folium.CircleMarker(
+                        location=[row[col_lat], row[col_lon]], 
+                        radius=6, 
+                        color=color_map['Protección Civil'],
+                        fill=True, 
+                        fill_color=color_map['Protección Civil'], 
+                        fill_opacity=0.8,
+                        popup=folium.Popup(popup_html, max_width=300),
+                        tooltip="Protección Civil"
+                    ).add_to(puntos_pc)
+                except Exception as e:
+                    continue
+
+            # Agregar puntos de Servicios Médicos
+            for _, row in df_sm.iterrows():
+                try:
+                    fecha_str = row[col_fecha].strftime('%d/%m/%Y') if hasattr(row[col_fecha], 'strftime') else str(row[col_fecha])
+                    popup_html = f"""
+                    <div style="font-family: Arial; font-size: 12px;">
+                        <b>Fecha:</b> {fecha_str}<br>
+                        <b>Colonia:</b> {row[col_colonia].title()}<br>
+                        <b>Atendido por:</b> Servicios Médicos
+                    </div>
+                    """
+                    folium.CircleMarker(
+                        location=[row[col_lat], row[col_lon]], 
+                        radius=6, 
+                        color=color_map['Servicios Médicos'],
+                        fill=True, 
+                        fill_color=color_map['Servicios Médicos'], 
+                        fill_opacity=0.8,
+                        popup=folium.Popup(popup_html, max_width=300),
+                        tooltip="Servicios Médicos"
+                    ).add_to(puntos_sm)
+                except Exception as e:
+                    continue
+
+            # Agregar mapas de calor
+            if not df_pc.empty:
+                HeatMap(
+                    df_pc[[col_lat, col_lon]].values, 
+                    radius=15,
+                    gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}
+                ).add_to(calor_pc)
+                
+            if not df_sm.empty:
+                HeatMap(
+                    df_sm[[col_lat, col_lon]].values, 
+                    radius=15,
+                    gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}
+                ).add_to(calor_sm)
+
+            # Agregar todas las capas al mapa
+            mapa.add_child(puntos_pc)
+            mapa.add_child(puntos_sm)
+            mapa.add_child(calor_pc)
+            mapa.add_child(calor_sm)
+        else:
+            # CAPA ÚNICA DE PUNTOS (sin distinción SM/PC)
+            puntos_todos = folium.FeatureGroup(name="📍 Todas las atenciones", show=True)
+            calor_todos = folium.FeatureGroup(name="🔥 Calor - Todas las atenciones", show=True)
+
+            # Agregar todos los puntos
+            for _, row in df.iterrows():
+                try:
+                    fecha_str = row[col_fecha].strftime('%d/%m/%Y') if hasattr(row[col_fecha], 'strftime') else str(row[col_fecha])
+                    popup_html = f"""
+                    <div style="font-family: Arial; font-size: 12px;">
+                        <b>Fecha:</b> {fecha_str}<br>
+                        <b>Colonia:</b> {row[col_colonia].title()}<br>
+                        <b>Tipo:</b> Atención médica
+                    </div>
+                    """
+                    folium.CircleMarker(
+                        location=[row[col_lat], row[col_lon]], 
+                        radius=6, 
+                        color=color_map['Protección Civil'],
+                        fill=True, 
+                        fill_color=color_map['Protección Civil'], 
+                        fill_opacity=0.8,
+                        popup=folium.Popup(popup_html, max_width=300),
+                        tooltip="Atención médica"
+                    ).add_to(puntos_todos)
+                except Exception as e:
+                    continue
+
+            # Agregar mapa de calor único
+            if not df.empty:
+                HeatMap(
+                    df[[col_lat, col_lon]].values, 
+                    radius=15,
+                    gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}
+                ).add_to(calor_todos)
+
+            # Agregar capas al mapa
+            mapa.add_child(puntos_todos)
+            mapa.add_child(calor_todos)
 
         # Agregar leyenda personalizada si está activada
         if mostrar_leyenda:
-            crear_leyenda_personalizada(mapa, color_map)
+            crear_leyenda_personalizada(mapa, color_map, usar_sm)
 
         # Control de capas
         folium.LayerControl(collapsed=True).add_to(mapa)
@@ -349,12 +417,23 @@ with st.sidebar:
             index=None,
             key="fecha_select"
         )
-        col_sm = st.selectbox(
-            "Columna de SERVICIOS MÉDICOS (SM):", 
-            columnas_disponibles, 
-            index=None,
-            key="sm_select"
+        
+        # Columna de Servicios Médicos ahora opcional
+        st.markdown("**Columna de SERVICIOS MÉDICOS (opcional):**")
+        usar_sm = st.checkbox(
+            "Distinguir entre Protección Civil y Servicios Médicos",
+            value=False,
+            key="usar_sm_checkbox"
         )
+        
+        col_sm = None
+        if usar_sm:
+            col_sm = st.selectbox(
+                "Selecciona la columna de SERVICIOS MÉDICOS:", 
+                columnas_disponibles, 
+                index=None,
+                key="sm_select"
+            )
         
         # Selección del campo del GeoJSON
         try:
@@ -369,18 +448,27 @@ with st.sidebar:
             st.error("El archivo GeoJSON no tiene un formato válido o está vacío.")
             st.stop()
 
-        # Validar que todas las columnas necesarias han sido seleccionadas
-        columnas_esenciales = [col_lat, col_lon, col_colonia, col_fecha, col_sm, campo_geojson_seleccionado]
+        # Validar que las columnas esenciales han sido seleccionadas
+        columnas_esenciales = [col_lat, col_lon, col_colonia, col_fecha, campo_geojson_seleccionado]
         
         if all(columnas_esenciales):
             try:
                 # PROCESAMIENTO DE DATOS
                 df_procesado = df.copy()
-                df_procesado['Fuente de Atención'] = np.where(
-                    df_procesado[col_sm].apply(limpiar_texto) == 'sm', 
-                    'Servicios Médicos', 
-                    'Protección Civil'
-                )
+                
+                # Determinar si se usa distinción SM/PC
+                usar_distincion_sm = usar_sm and col_sm is not None
+                
+                if usar_distincion_sm:
+                    df_procesado['Fuente de Atención'] = np.where(
+                        df_procesado[col_sm].apply(limpiar_texto) == 'sm', 
+                        'Servicios Médicos', 
+                        'Protección Civil'
+                    )
+                else:
+                    # Si no se usa SM, todas las atenciones son de Protección Civil
+                    df_procesado['Fuente de Atención'] = 'Protección Civil'
+                
                 df_procesado[col_colonia] = df_procesado[col_colonia].apply(limpiar_texto)
                 df_procesado[col_lat] = pd.to_numeric(df_procesado[col_lat], errors='coerce')
                 df_procesado[col_lon] = pd.to_numeric(df_procesado[col_lon], errors='coerce')
@@ -421,7 +509,8 @@ with st.sidebar:
                         'col_lat': col_lat,
                         'col_lon': col_lon,
                         'col_colonia': col_colonia,
-                        'col_fecha': col_fecha
+                        'col_fecha': col_fecha,
+                        'usar_sm': usar_distincion_sm
                     }
                     st.session_state.mapa_generado = True
                     
@@ -438,14 +527,20 @@ if (st.session_state.mapa_generado and
     
     st.success(f"🗺️ Mostrando {len(df_filtrado)} atenciones en el mapa.")
     
-    # Mostrar métricas
-    conteo_pc = (df_filtrado['Fuente de Atención'] == 'Protección Civil').sum()
-    conteo_sm = (df_filtrado['Fuente de Atención'] == 'Servicios Médicos').sum()
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("📊 Total de Atenciones", f"{conteo_pc + conteo_sm}")
-    col2.metric("🔵 Protección Civil", f"{conteo_pc}")
-    col3.metric("🔴 Servicios Médicos", f"{conteo_sm}")
+    # Mostrar métricas según si se usa SM o no
+    if config['usar_sm']:
+        conteo_pc = (df_filtrado['Fuente de Atención'] == 'Protección Civil').sum()
+        conteo_sm = (df_filtrado['Fuente de Atención'] == 'Servicios Médicos').sum()
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📊 Total de Atenciones", f"{conteo_pc + conteo_sm}")
+        col2.metric("🔵 Protección Civil", f"{conteo_pc}")
+        col3.metric("🔴 Servicios Médicos", f"{conteo_sm}")
+    else:
+        total_atenciones = len(df_filtrado)
+        col1, col2 = st.columns(2)
+        col1.metric("📊 Total de Atenciones", f"{total_atenciones}")
+        col2.metric("🔵 Todas las atenciones", f"{total_atenciones}")
     
     # Crear y mostrar el mapa
     with st.spinner("Generando mapa..."):
@@ -457,7 +552,8 @@ if (st.session_state.mapa_generado and
             config['col_lon'], 
             config['col_colonia'],
             config['col_fecha'],
-            st.session_state.mostrar_leyenda
+            st.session_state.mostrar_leyenda,
+            config['usar_sm']
         )
     
     if mapa_final:
